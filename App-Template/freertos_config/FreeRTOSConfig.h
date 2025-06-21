@@ -47,6 +47,7 @@ specific language governing permissions and limitations under the License.
 #  include "RP2350.h"
 #endif
 
+#include "my_debug.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -77,7 +78,7 @@ extern "C" {
 #define configCPU_CLOCK_HZ                      SystemCoreClock
 #define configTICK_RATE_HZ                      ( ( TickType_t ) 1000 )
 #define portTICK_RATE_MS                        ( ( TickType_t ) 1000 / configTICK_RATE_HZ )
-#define configMAX_PRIORITIES                    32
+#define configMAX_PRIORITIES                    8 //32
 #define configMINIMAL_STACK_SIZE                ( configSTACK_DEPTH_TYPE ) 256
 #define configMAX_TASK_NAME_LEN                 16
 //#define configUSE_16_BIT_TICKS                  0
@@ -90,11 +91,11 @@ extern "C" {
 #define configUSE_MUTEXES                       1
 #define configUSE_RECURSIVE_MUTEXES             1
 #define configUSE_APPLICATION_TASK_TAG          0
-#define configUSE_COUNTING_SEMAPHORES           0
+#define configUSE_COUNTING_SEMAPHORES           1
 #define configUSE_ALTERNATIVE_API               0 /* Deprecated! */
 #define configQUEUE_REGISTRY_SIZE               10
 #define configUSE_QUEUE_SETS                    1
-#define configUSE_TIME_SLICING                  0
+#define configUSE_TIME_SLICING                  1
 #define configUSE_NEWLIB_REENTRANT              1   // Necessary if any floating point printfs are used!
 #define configENABLE_BACKWARD_COMPATIBILITY     0
 #define configNUM_THREAD_LOCAL_STORAGE_POINTERS 5
@@ -127,7 +128,7 @@ extern "C" {
 #define configUSE_TIMERS                        1
 #define configTIMER_TASK_PRIORITY               ( configMAX_PRIORITIES - 1 )
 #define configTIMER_QUEUE_LENGTH                10
-#define configTIMER_TASK_STACK_DEPTH            1024
+#define configTIMER_TASK_STACK_DEPTH            512 //1024
 
 /* Interrupt nesting behaviour configuration. */
 /*  The Cortex-M0+ implements the two most significant bits of an 8-bit priority field, 
@@ -191,6 +192,8 @@ to exclude the API function. */
 #define INCLUDE_xTaskResumeFromISR              1
 #define INCLUDE_xQueueGetMutexHolder            1
 #define INCLUDE_xSemaphoreGetMutexHolder        1
+#define INCLUDE_uxTaskGetSystemState            1
+#define INCLUDE_pxTaskGetStackStart             1
 
 #define portCONFIGURE_TIMER_FOR_RUN_TIME_STATS() 
 extern uint64_t time_us_64(void); // "hardware/timer.h"

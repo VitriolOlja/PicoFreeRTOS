@@ -227,10 +227,331 @@ cd into the repo
 
 
 
+## PANIC ! size > 0 
+
+I have not a gods clue on green earth why this is happening
+
+Below code from file `pico-sdk\lib\lwip\contrib\ports\freertos\sys_arch.c` on line `320` seems to be a culprit. 
+```c
+err_t
+sys_mbox_new(sys_mbox_t *mbox, int size)
+{
+  LWIP_ASSERT("mbox != NULL", mbox != NULL);
+  LWIP_ASSERT("size > 0", size > 0);
+
+  mbox->mbx = xQueueCreate((UBaseType_t)size, sizeof(void *));
+  if(mbox->mbx == NULL) {
+    SYS_STATS_INC(mbox.err);
+    return ERR_MEM;
+  }
+  SYS_STATS_INC_USED(mbox);
+  return ERR_OK;
+}
+```
+
+Question is, who are what calls sys_mbox_new when calling `cyw43_arch_init`
 
 
+I'm pretty sure the function we call when using `pico_cyw43_arch_lwip_sys_freertos` is the following
+from `pico-sdk\src\rp2_common\pico_cyw43_arch\cyw43_arch_freertos.c`on line 41. 
+
+```c
+int cyw43_arch_init(void) {
+    async_context_t *context = cyw43_arch_async_context();
+    if (!context) {
+        context = cyw43_arch_init_default_async_context();
+        if (!context) return PICO_ERROR_GENERIC;
+        cyw43_arch_set_async_context(context);
+    }
+    bool ok = cyw43_driver_init(context);
+#if CYW43_LWIP // this is true when using `pico_cyw43_arch_lwip_sys_freertos`
+    ok &= lwip_freertos_init(context);
+#endif
+#if CYW43_ENABLE_BLUETOOTH
+    ok &= btstack_cyw43_init(context);
+#endif
+    if (!ok) {
+        cyw43_arch_deinit();
+        return PICO_ERROR_GENERIC;
+    } else {
+        return 0;
+    }
+}
+```
+
+Since we currently do not have openocd lets use some classic debug prints and do the following to see what happens
+
+```c
+int cyw43_arch_init(void) {
+    printf("cyw43_arch_init: Starting\n");
+
+    async_context_t *context = cyw43_arch_async_context();
+    if (!context) {
+        printf("cyw43_arch_init: Creating default async context\n");
+        context = cyw43_arch_init_default_async_context();
+        if (!context) {
+            printf("cyw43_arch_init: Failed to create async context\n");
+            return PICO_ERROR_GENERIC;
+        }
+        cyw43_arch_set_async_context(context);
+    }
+
+    printf("cyw43_arch_init: Calling cyw43_driver_init\n");
+    bool ok = cyw43_driver_init(context);
+
+#if CYW43_LWIP
+    printf("cyw43_arch_init: Calling lwip_freertos_init\n");
+    ok &= lwip_freertos_init(context); // this is probably where the crash occurs
+#endif
+
+#if CYW43_ENABLE_BLUETOOTH
+    printf("cyw43_arch_init: Calling btstack_cyw43_init\n");
+    ok &= btstack_cyw43_init(context);
+#endif
+
+    if (!ok) {
+        printf("cyw43_arch_init: init failed\n");
+        cyw43_arch_deinit();
+        return PICO_ERROR_GENERIC;
+    } else {
+        printf("cyw43_arch_init: init successful\n");
+        return 0;
+    }
+}
+
+```
+
+Running gave me the following 
+
+```
+cyw43_arch_init: Starting
+cyw43_arch_init: Creating default async context
+cyw43_arch_init: Calling cyw43_driver_init
+cyw43_arch_init: Calling lwip_freertos_init
+
+*** PANIC ***
+
+size > 0
+```
+
+Which concludes the crash occurs in `lwip_freertos_init(context)`. 
 
 
+That function is defined in the `pico_lwip` module in the file `pico-sdk\src\rp2_common\pico_lwip\lwip_freertos.c` on line 27. 
+
+```c
+    bool lwip_freertos_init(async_context_t *context) {
+        assert(!lwip_context);
+        lwip_context = context;
+        static bool done_lwip_init;
+        if (!done_lwip_init) {
+            done_lwip_init = true;
+            SemaphoreHandle_t init_sem = xSemaphoreCreateBinary();
+            tcpip_task_blocker = xSemaphoreCreateBinary();
+            tcpip_init(tcpip_init_done, init_sem); // likely root of failure
+            xSemaphoreTake(init_sem, portMAX_DELAY);
+            vSemaphoreDelete(init_sem);
+        } else {
+            xSemaphoreGive(tcpip_task_blocker);
+        }
+        return true;
+    }
+```
+
+```c
+bool lwip_freertos_init(async_context_t *context) {
+    printf("lwip_freertos_init: context=%p\n", context);
+
+    assert(!lwip_context);
+    lwip_context = context;
+
+    static bool done_lwip_init;
+    if (!done_lwip_init) {
+        printf("lwip_freertos_init: First time init\n");
+        done_lwip_init = true;
+
+        SemaphoreHandle_t init_sem = xSemaphoreCreateBinary();
+        if (!init_sem) {
+            printf("lwip_freertos_init: Failed to create init semaphore\n");
+            return false;
+        }
+
+        tcpip_task_blocker = xSemaphoreCreateBinary();
+        if (!tcpip_task_blocker) {
+            printf("lwip_freertos_init: Failed to create tcpip_task_blocker\n");
+            vSemaphoreDelete(init_sem);
+            return false;
+        }
+
+        printf("lwip_freertos_init: Calling tcpip_init\n");
+        tcpip_init(tcpip_init_done, init_sem);
+
+        printf("lwip_freertos_init: Waiting on init_sem\n");
+        xSemaphoreTake(init_sem, portMAX_DELAY);
+
+        printf("lwip_freertos_init: lwIP init complete\n");
+        vSemaphoreDelete(init_sem);
+    } else {
+        printf("lwip_freertos_init: Already initialized, releasing blocker\n");
+        xSemaphoreGive(tcpip_task_blocker);
+    }
+
+    return true;
+}
+```
 
 
+And just like we believed, it seems to fail inside the tcp_init function.
+
+```bash
+cyw43_arch_init: Starting
+cyw43_arch_init: Creating default async context
+cyw43_arch_init: Calling cyw43_driver_init
+cyw43_arch_init: Calling lwip_freertos_init
+lwip_freertos_init: context=20001220
+lwip_freertos_init: First time init
+lwip_freertos_init: Calling tcpip_init
+
+*** PANIC ***
+
+size > 0
+```
+
+There are two versions of the `tcp_init()` function. They are defined in. 
+
+* `pico-sdk\lib\lwip\src\api\tcpip.c`
+
+* `pico-sdk\lib\btstack\3rd-party\lwip\core\src\api\tcpip.c`
+
+The functions are identical, but I assume its likely we are using the first one. 
+Again we'll comment it. 
+
+```c
+/**
+ * @ingroup lwip_os
+ * Initialize this module:
+ * - initialize all sub modules
+ * - start the tcpip_thread
+ *
+ * @param initfunc a function to call when tcpip_thread is running and finished initializing
+ * @param arg argument to pass to initfunc
+ */
+void tcpip_init(tcpip_init_done_fn initfunc, void *arg)
+{
+  printf("[tcpip_init] Starting lwIP initialization...\n");
+
+  // Initialize the core lwIP modules (TCP, UDP, IP, etc.)
+  lwip_init();
+  printf("[tcpip_init] lwip_init() complete.\n");
+
+  // Store the callback to signal when TCP/IP init is done
+  tcpip_init_done = initfunc;
+  tcpip_init_done_arg = arg;
+
+  // Create the mailbox used by the TCPIP thread
+  if (sys_mbox_new(&tcpip_mbox, TCPIP_MBOX_SIZE) != ERR_OK) {
+    printf("[tcpip_init] ERROR: Failed to create tcpip_thread mbox.\n");
+    LWIP_ASSERT("failed to create tcpip_thread mbox", 0);
+  } else {
+    printf("[tcpip_init] tcpip_thread mbox created.\n");
+  }
+
+#if LWIP_TCPIP_CORE_LOCKING
+  // Create a mutex for core locking, if enabled
+  if (sys_mutex_new(&lock_tcpip_core) != ERR_OK) {
+    printf("[tcpip_init] ERROR: Failed to create lock_tcpip_core mutex.\n");
+    LWIP_ASSERT("failed to create lock_tcpip_core", 0);
+  } else {
+    printf("[tcpip_init] lock_tcpip_core mutex created.\n");
+  }
+#endif /* LWIP_TCPIP_CORE_LOCKING */
+
+  // Create the TCPIP thread that processes network events
+  printf("[tcpip_init] Creating tcpip_thread...\n");
+  sys_thread_new(TCPIP_THREAD_NAME, tcpip_thread, NULL, TCPIP_THREAD_STACKSIZE, TCPIP_THREAD_PRIO);
+  printf("[tcpip_init] tcpip_thread started.\n");
+}
+```
+
+Okay. We received the following print
+
+```bash
+cyw43_arch_init: Starting
+cyw43_arch_init: Creating default async context
+cyw43_arch_init: Calling cyw43_driver_init
+cyw43_arch_init: Calling lwip_freertos_init
+lwip_freertos_init: context=20001220
+lwip_freertos_init: First time init
+lwip_freertos_init: Calling tcpip_init
+[tcpip_init] Starting lwIP initialization...
+[tcpip_init] lwip_init() complete.
+
+*** PANIC ***
+
+size > 0
+```
+
+And we can see from following here that likely point of failure seems to be 
+```c
+sys_mbox_new(&tcpip_mbox, TCPIP_MBOX_SIZE) != ERR_OK
+```
+
+since this function assers that size is greater than zero, like we saw above. 
+
+```c
+LWIP_ASSERT("size > 0", size > 0);
+```
+
+What actually is size here? 
+
+adding a printout gives `[tcpip_init] TCPIP_MBOX_SIZE = 0`. 
+
+
+Okay. So we are missing a definition perhaps in our `lwipopts.h`. 
+
+Among our protocol settings we'll therefore set some tcpip settings
+
+```c
+// TCP/IP thread configuration
+#define TCPIP_MBOX_SIZE 16
+#define TCPIP_THREAD_STACKSIZE 1024
+#define TCPIP_THREAD_PRIO 3
+```
+
+This fixed it. Now we receive the following. BLISS! 
+
+```bash
+cyw43_arch_init: Starting
+cyw43_arch_init: Creating default async context
+cyw43_arch_init: Calling cyw43_driver_init
+cyw43_arch_init: Calling lwip_freertos_init
+lwip_freertos_init: context=20001220
+lwip_freertos_init: First time init
+lwip_freertos_init: Calling tcpip_init
+[tcpip_init] Starting lwIP initialization...
+[tcpip_init] lwip_init() complete.
+[tcpip_init] TCPIP_MBOX_SIZE = 16[tcpip_init] tcpip_thread mbox created.
+[tcpip_init] lock_tcpip_core mutex created.
+[tcpip_init] Creating tcpip_thread...
+[tcpip_init] tcpip_thread started.
+lwip_freertos_init: Waiting on init_sem
+lwip_freertos_init: lwIP init complete
+cyw43_arch_init: init successful
+Successfully initialized cyw43Version: 7.95.49 (2271bb6 CY) CRC: b7a28ef3 Date: Mon 2021-11-29 22:50:27 PST Ucode Ver: 1043.2162 FWID 01-c51d9400
+API: 12.2
+Data: RaspberryPi.PicoW
+Compiler: 1.29.4
+ClmImport: 1.47.1
+Customization: v5 22/06/24
+Creation: 2022-06-24 06:55:08
+
+Successfully enabled sta modeAttempting to connect to <SSID>...
+connect status: joining
+connect status: no ip
+connect status: link up
+Connected!
+Http server initialised
+
+Listening at 192.168.x.x
+```
 

@@ -38,7 +38,13 @@
 #else
 
 // MEM_LIBC_MALLOC is incompatible with non polling versions
+
 #define MEM_LIBC_MALLOC 0
+#define MEMP_MEM_MALLOC 1
+#define LWIP_MALLOC_MEMPOOL 0
+
+//#define mem_malloc pvPortMalloc 
+//#define mem_free   vPortFree    // causes mem malloc errors.
 #endif
 
 // Memory alignment for CPU (4 bytes = 32-bit alignment)
@@ -101,6 +107,14 @@
 // changed Disable netconn API (higher-level but not needed for NO_SYS mode)
 //enabled
 #define LWIP_NETCONN 1
+
+// TCP/IP thread configuration
+#define TCPIP_MBOX_SIZE 16
+#define TCPIP_THREAD_STACKSIZE 1024
+#define TCPIP_THREAD_PRIO 3
+
+#define DEFAULT_TCP_RECVMBOX_SIZE 128
+#define DEFAULT_UDP_RECVMBOX_SIZE 8
 
 // === Statistics (disabled to save memory) ===
 #define MEM_STATS 0
@@ -190,7 +204,6 @@
 #define DHCP_DEBUG LWIP_DBG_OFF
 
 
-#define DEFAULT_TCP_RECVMBOX_SIZE 128
 
 #define SNTP_SUPPORT      1
 #define SNTP_SERVER_DNS   1

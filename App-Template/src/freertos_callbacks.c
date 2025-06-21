@@ -16,6 +16,10 @@
  * for this file.
  */
 
+/**
+ * The stack overflow hook (or stack overflow callback) is a function that is called by the kernel when it detects a
+    stack overflow. To use a stack overflow hook function:
+ */
 void __attribute__((weak))
 vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName) {
     (void) xTask;

@@ -51,6 +51,8 @@ add_compile_definitions(PICO_MAX_IRQ_CHAINED=8)
 # Define the main application executable
 add_executable(my_app
     src/main.c
+    src/my_debug.c
+    src/pico_error_str.c
 )
 
 
@@ -60,38 +62,48 @@ target_sources(my_app PRIVATE
 
 target_include_directories(my_app PRIVATE
     ${FREERTOS_CFG_DIRECTORY}/
+    src
     lwip_config
 )
 
 target_link_libraries(my_app
-    cmsis_core
-    FreeRTOS-Kernel
-    FreeRTOS-Kernel-Heap4
+    pico_stdlib
+    pico_sync
+    pico_multicore
+    pico_aon_timer
+
     hardware_adc
     hardware_clocks
     hardware_dma
     hardware_pio
-    #hardware_rtc
     hardware_spi
     hardware_timer
     hardware_i2c
-    pico_aon_timer
-    pico_multicore
-    pico_stdlib
-    pico_sync
+    # hardware_rtc
 
-    # pico_cyw43_arch_lwip_threadsafe_background # for no sys 1
-    pico_cyw43_arch_lwip_sys_freertos # for nosys = 0
-    # pico_lwip
+    cmsis_core
+    FreeRTOS-Kernel-Heap4
+
+    pico_cyw43_arch_lwip_sys_freertos
     pico_lwip_http
 )
 
-target_compile_definitions(my_app PRIVATE
-    # lwip
-    WIFI_SSID=\"$ENV{WIFI_SSID}\"
-    WIFI_PASSWORD=\"$ENV{WIFI_PASSWORD}\"
+# either use environment variables or 
+# compiler arguments to load ssid and pass
+if(NOT DEFINED WIFI_SSID)
+    set(WIFI_SSID $ENV{WIFI_SSID})
+endif()
 
-    # FreeRTOS+FAT+CLI
+if(NOT DEFINED WIFI_PASSWORD)
+    set(WIFI_PASSWORD $ENV{WIFI_PASSWORD})
+endif()
+
+# Then add them as preprocessor definitions
+target_compile_definitions(my_app PRIVATE
+    WIFI_SSID=\"${WIFI_SSID}\"
+    WIFI_PASSWORD=\"${WIFI_PASSWORD}\"
+
+    CONFIG_USE_LWIP=1
     USE_PRINTF
     USE_DBG_PRINTF
     # USE_SPI_INTERFACE

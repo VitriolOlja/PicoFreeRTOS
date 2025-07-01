@@ -1,5 +1,3 @@
-
-#include "FreeRTOS_errno_FAT.h"
 //
 #include "FreeRTOS_strerror.h"
 

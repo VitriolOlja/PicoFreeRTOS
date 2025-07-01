@@ -555,3 +555,137 @@ Http server initialised
 Listening at 192.168.x.x
 ```
 
+
+
+## Adding pico btstack for ble
+
+### Cmake for Ble
+
+Enable bluetooth in compile definitions
+
+```cmake
+# Then add them as preprocessor definitions
+target_compile_definitions(my_app PRIVATE
+    [...]
+    CYW43_ENABLE_BLUETOOTH=1
+    [...]
+)
+```
+
+Add target libraries. 
+
+```cmake
+target_link_libraries(
+    [...]
+    pico_btstack_ble      # BLE stack
+    pico_btstack_cyw43    # BLE stack with CYW43
+    [...]
+)
+```
+
+
+
+The definition of the pico_btstack_ble library can be found in [`pico-sdk\src\rp2_common\pico_btstack\CMakeLists.txt`](pico-sdk\src\rp2_common\pico_btstack\CMakeLists.txt) , and inside it we can see the following cmake definition.
+
+```cmake
+pico_add_library(pico_btstack_ble)
+    target_sources(pico_btstack_ble INTERFACE
+        # These files implemen the attribute protocol ATT and database
+        # they handle reading/writing BLE characteristics - key to services. 
+        ${PICO_BTSTACK_PATH}/src/ble/att_db.c
+        ${PICO_BTSTACK_PATH}/src/ble/att_db_util.c
+        ${PICO_BTSTACK_PATH}/src/ble/att_dispatch.c # central dispatcher for ATT requests. 
+        ${PICO_BTSTACK_PATH}/src/ble/att_server.c
+
+        # gatt client/server handles gatt profiles 
+        ${PICO_BTSTACK_PATH}/src/ble/gatt-service/battery_service_server.c # example services. 
+        ${PICO_BTSTACK_PATH}/src/ble/gatt-service/battery_service_client.c
+        ${PICO_BTSTACK_PATH}/src/ble/gatt-service/cycling_power_service_server.c
+        ${PICO_BTSTACK_PATH}/src/ble/gatt-service/cycling_speed_and_cadence_service_server.c
+        ${PICO_BTSTACK_PATH}/src/ble/gatt-service/device_information_service_server.c
+        ${PICO_BTSTACK_PATH}/src/ble/gatt-service/device_information_service_client.c
+        ${PICO_BTSTACK_PATH}/src/ble/gatt-service/heart_rate_service_server.c
+        ${PICO_BTSTACK_PATH}/src/ble/gatt-service/hids_client.c
+        ${PICO_BTSTACK_PATH}/src/ble/gatt-service/hids_device.c
+        ${PICO_BTSTACK_PATH}/src/ble/gatt-service/nordic_spp_service_server.c
+        ${PICO_BTSTACK_PATH}/src/ble/gatt-service/ublox_spp_service_server.c
+        ${PICO_BTSTACK_PATH}/src/ble/gatt-service/ancs_client.c
+        ${PICO_BTSTACK_PATH}/src/ble/gatt_client.c
+
+        # handles ble database - storing bonded device info - how files are tracked and remembered. 
+        ${PICO_BTSTACK_PATH}/src/ble/le_device_db_memory.c
+        ${PICO_BTSTACK_PATH}/src/ble/le_device_db_tlv.c
+
+        ${PICO_BTSTACK_PATH}/src/ble/sm.c # security manager (pairing/encryption/bonding for secure ble.)
+```
+
+The definition of the pico_btstack_cyw43 library can be found in [`pico-sdk\src\rp2_common\pico_cyw43_driver\CMakeLists.txt`](pico-sdk\src\rp2_common\pico_cyw43_driver\CMakeLists.txt)
+
+```cmake
+if (PICO_CYW43_SUPPORTED AND TARGET pico_btstack_base)
+        message("Pico W Bluetooth build support available.")
+
+        pico_add_library(pico_btstack_cyw43)
+        target_sources(pico_btstack_cyw43 INTERFACE
+                ${CMAKE_CURRENT_LIST_DIR}/btstack_cyw43.c
+                )
+        target_include_directories(pico_btstack_cyw43_headers SYSTEM INTERFACE
+                ${CMAKE_CURRENT_LIST_DIR}/include
+                )
+        pico_mirrored_target_link_libraries(pico_btstack_cyw43 INTERFACE
+                pico_btstack_base
+                pico_btstack_flash_bank
+                pico_btstack_run_loop_async_context
+                pico_cyw43_arch
+                pico_btstack_hci_transport_cyw43
+                )
+    endif()
+```
+
+
+To initialize ble with freertos we call two functions. 
+
+```c
+btstack_run_loop_init(&btstack_run_loop_freertos_init);
+```
+
+The first function takes a pointer to the second one. 
+
+```c
+// init must be called before any other run_loop call
+void btstack_run_loop_init(const btstack_run_loop_t * run_loop){
+    btstack_assert(the_run_loop == NULL);
+    the_run_loop = run_loop;
+    the_run_loop->init();
+}
+```
+
+```c
+
+static void btstack_run_loop_freertos_init(void){
+    btstack_run_loop_base_init();
+
+#ifdef USE_STATIC_ALLOC
+    btstack_run_loop_queue = xQueueCreateStatic(RUN_LOOP_QUEUE_LENGTH, RUN_LOOP_QUEUE_ITEM_SIZE, btstack_run_loop_queue_storage, &btstack_run_loop_queue_object);
+    btstack_run_loop_callbacks_mutex = xSemaphoreCreateMutexStatic(&btstack_run_loop_callback_mutex_object);
+#else
+    btstack_run_loop_queue = xQueueCreate(RUN_LOOP_QUEUE_LENGTH, RUN_LOOP_QUEUE_ITEM_SIZE);
+    btstack_run_loop_callbacks_mutex = xSemaphoreCreateMutex();
+#endif
+
+#ifndef HAVE_FREERTOS_TASK_NOTIFICATIONS
+    // event group to wake run loop
+    btstack_run_loop_event_group = xEventGroupCreate();
+#endif
+
+    // task to handle to optimize 'run on main thread'
+    btstack_run_loop_task = xTaskGetCurrentTaskHandle();
+
+    log_info("run loop init, task %p, queue item size %u", btstack_run_loop_task, (int) sizeof(function_call_t));
+}
+```
+
+
+We can also see from this function there are two ways to run the btstack - 
+with or without setting `HAVE_FREERTOS_TASK_NOTIFICATIONS`
+

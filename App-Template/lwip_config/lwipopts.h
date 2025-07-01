@@ -216,10 +216,10 @@ void sntpSetTimeSec(uint32_t sec);
 #define SNTP_UPDATE_DELAY 60*60*1000
 
 // #define CYW43_VDEBUG(...) printf(__VA_ARGS__)
-#define CYW43_VERBOSE_DEBUG 1
-#define CYW43_DEBUG
-#define CYW43_INFO
-#define PICO_CYW43_ARCH_DEBUG_ENABLED 1
+// #define CYW43_VERBOSE_DEBUG 1
+// #define CYW43_DEBUG
+// #define CYW43_INFO
+// #define PICO_CYW43_ARCH_DEBUG_ENABLED 1
 
 
 #endif /* __LWIPOPTS_H__ */

@@ -47,13 +47,15 @@ add_compile_definitions(APP_VERSION="1.0.0")
 add_compile_definitions(BUILD_NUM=1)
 add_compile_definitions(PICO_MAX_IRQ_CHAINED=8)
 
-
 # Define the main application executable
 add_executable(my_app
     src/main.c
     src/my_debug.c
     src/pico_error_str.c
 )
+
+# Compile GATT file to header
+pico_btstack_make_gatt_header(my_app PRIVATE "${CMAKE_CURRENT_LIST_DIR}/bt_config/led_control.gatt")
 
 
 target_sources(my_app PRIVATE
@@ -64,6 +66,7 @@ target_include_directories(my_app PRIVATE
     ${FREERTOS_CFG_DIRECTORY}/
     src
     lwip_config
+    bt_config
 )
 
 target_link_libraries(my_app
@@ -84,8 +87,17 @@ target_link_libraries(my_app
     cmsis_core
     FreeRTOS-Kernel-Heap4
 
-    pico_cyw43_arch_lwip_sys_freertos
-    pico_lwip_http
+    pico_btstack_ble
+    pico_btstack_cyw43
+    pico_cyw43_arch_none # for no wifi lwip is overkill -
+    # we might still have to have some architecture for the 
+    # cyw43 network chip though. 
+    # pico_cyw43_arch_lwip_sys_freertos
+    # pico_lwip_http
+
+    # pico_btstack_bnep_lwip_sys_freertos 
+    # Adds Bluetooth Network Encapsulation Protocol (BNEP) support using
+    # LwIP with FreeRTOS for NO_SYS=0 
 )
 
 # either use environment variables or 
@@ -106,6 +118,9 @@ target_compile_definitions(my_app PRIVATE
     CONFIG_USE_LWIP=1
     USE_PRINTF
     USE_DBG_PRINTF
+
+    CYW43_ENABLE_BLUETOOTH=1
+    HAVE_FREERTOS_TASK_NOTIFICATIONS=1 # if we want to use task notifications. 
     # USE_SPI_INTERFACE
 )
 

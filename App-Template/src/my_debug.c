@@ -1,13 +1,6 @@
 /* my_debug.c */
 
-#include <stdarg.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include <string.h>
-#include <time.h>
-//
-#include "pico/multicore.h"  // get_core_num()
+
 
 #if PICO_RP2040
 #  include "RP2040.h"

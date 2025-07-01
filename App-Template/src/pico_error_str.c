@@ -1,7 +1,7 @@
-//https://github.com/carlk3/FreeRTOS-FAT-CLI-for-RPi-Pico/blob/master/examples/wifi_httpd/pico_error_str.c
 #include "pico/error.h"
 #include "pico_error_str.h"
 
+//https://github.com/carlk3/FreeRTOS-FAT-CLI-for-RPi-Pico/blob/master/examples/wifi_httpd/pico_error_str.c
 char const *pico_error_str(int error) {
     switch (error) {
     case PICO_OK: return "No error; the operation succeeded";

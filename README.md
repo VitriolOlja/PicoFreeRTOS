@@ -5,6 +5,8 @@ This is a guide mostly written for myself on how to use FreeRTOS on the Raspberr
 It is highly based on the port by [Tony Smith](https://github.com/smittytone/RP2040-FreeRTOS/tree/main)
 aswell as [this one](https://github.com/carlk3/FreeRTOS-FAT-CLI-for-RPi-Pico/blob/master/src/FreeRTOS%2BFAT%2BCLI/src/freertos_callbacks.c) by Carl J Kugler. 
 
+In the process of learning how everything works, I’ve modified, adapted, and rewritten quite a bit of code. If I’ve inadvertently missed giving proper credit or included code without the correct attribution, please let me know — I’ll be happy to fix it.
+
 
 ## Building the application
 

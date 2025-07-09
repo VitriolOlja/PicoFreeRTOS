@@ -51,7 +51,8 @@ add_compile_definitions(PICO_MAX_IRQ_CHAINED=8)
 add_executable(my_app
     src/main.c
     src/my_debug.c
-    src/pico_error_str.c
+    src/pico_error_str.c  
+    src/service_implementation.c
 )
 
 # Compile GATT file to header
@@ -127,6 +128,8 @@ target_compile_definitions(my_app PRIVATE
 # STDIO over USB and UART
 pico_enable_stdio_usb(my_app 1)
 pico_enable_stdio_uart(my_app 1)
+
+target_link_options(my_app PRIVATE "-T${CMAKE_SOURCE_DIR}/linker/noinit.ld")
 
 # Create UF2 and other outputs
 pico_add_extra_outputs(my_app)

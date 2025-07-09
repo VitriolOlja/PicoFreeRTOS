@@ -11,10 +11,19 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
+//#include "watchdog.h"
+#include "hardware/watchdog.h"
+#include "hardware/gpio.h"
+#include "pico/time.h"
+
+//#include "crash_flag.h"
+
 /**
  * see https://github.com/carlk3/FreeRTOS-FAT-CLI-for-RPi-Pico/blob/master/src/FreeRTOS%2BFAT%2BCLI/src/freertos_callbacks.c
  * for this file.
  */
+
+
 
 /**
  * The stack overflow hook (or stack overflow callback) is a function that is called by the kernel when it detects a
@@ -22,12 +31,22 @@
  */
 void __attribute__((weak))
 vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName) {
+    //cannot printf here
+    //although it seems like a nice way. printf seems to use stack which in turn exaggerates the crash
+    //https://forums.freertos.org/t/question-vapplicationstackoverflowhook/980/6
     (void) xTask;
+    //( void ) pcTaskName;
     /* The stack space has been exceeded for a task, considering allocating more. */
-    printf("\nOut of stack space!\n");
-    printf(pcTaskName);
-    printf("\n");
-    exit(1);
+
+    gpio_init(15);             
+    gpio_set_dir(15, GPIO_OUT);
+
+    while (1) {
+        gpio_put(15, 1);
+        sleep_ms(100);
+        gpio_put(15, 0);
+        sleep_ms(100);
+    }
 }
 
 // #ifndef NDEBUG
@@ -39,6 +58,7 @@ vApplicationMallocFailedHook(void) {
     printf("\nMalloc failed!\n");
     printf(pcTaskGetName(NULL));
     printf("\n");
+    taskDISABLE_INTERRUPTS();
     exit(2);
 }
 // #endif
